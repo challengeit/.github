@@ -1,22 +1,27 @@
 ## 📝 Descrição
 
-<!-- Descreve brevemente o que foi feito neste PR -->
+_Descreve brevemente o que foi feito neste PR_
 
 ## 🔍 Contexto
 
-<!-- Qual o problema ou necessidade que levou a esta alteração? -->
+_Qual o problema ou necessidade que levou a estes desenvolvimentos?_
 
 ## ✅ Checklist
 
 - [ ] O código foi testado localmente
-- [ ] A descrição está clara e informativa
-- [ ] Foram seguidas as guidelines de estilo
-- [ ] Merge com a branch base feito (ex: `main` ou `develop`)
+- [ ] O código foi testado em ambiente de CI
+- [ ] Foram adicionados testes unitários ou de integração
+- [ ] O Schema da Base de Dados foi atualizado
+- [ ] Foram adicionados/atualizados valores do Modelo de Dados
 
-## 🚦 Como testar
+## 🚀 Instruções para o deploy
 
-<!-- Indica os passos ou comandos para testar a alteração -->
+_Indica eventuais instruções específicas para o deploy deste PR, como por exemplo alterações ao schema da base de dados_
 
-## 📎 Notas adicionais
+## 🚦 Como testar/confirmar os desenvolvimentos
 
-<!-- Algum ponto relevante para o revisor? -->
+_Indica os passos ou instruções para testar os desenvolvimentos feitos_
+
+## 📄 Notas adicionais
+
+_Algum ponto relevante para os reviewers?_
