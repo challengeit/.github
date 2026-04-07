@@ -1,0 +1,191 @@
+name: Claude PR Review
+
+on:
+  workflow_call:
+    inputs:
+      project_context:
+        required: false
+        type: string
+        default: ""
+    secrets:
+      ANTHROPIC_API_KEY:
+        required: true
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Lê o template do PR do repo central .github
+      - name: Load PR template
+        id: template
+        run: |
+          # Tenta carregar do repo local, senão vai buscar ao repo central
+          if [ -f ".github/pull_request_template.md" ]; then
+            TEMPLATE_PATH=".github/pull_request_template.md"
+          else
+            gh api repos/challengeit/.github/contents/pull_request_template.md \
+              --jq '.content' | base64 -d > /tmp/pr_template.md
+            TEMPLATE_PATH="/tmp/pr_template.md"
+          fi
+
+          echo "content<<EOF" >> $GITHUB_OUTPUT
+          cat "$TEMPLATE_PATH" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Deteta plan*.md mais recente no histórico git
+      - name: Detect plan file
+        id: plan
+        run: |
+          PLAN_FILE=$(git log --name-only --format="" HEAD \
+            | grep "^plan.*\.md$" \
+            | head -1)
+
+          if [ -n "$PLAN_FILE" ] && [ -f "$PLAN_FILE" ]; then
+            echo "found=true" >> $GITHUB_OUTPUT
+            echo "content<<EOF" >> $GITHUB_OUTPUT
+            cat "$PLAN_FILE" >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+          else
+            echo "found=false" >> $GITHUB_OUTPUT
+          fi
+
+      # Obtém o diff do branch
+      - name: Get branch diff
+        id: diff
+        run: |
+          echo "content<<EOF" >> $GITHUB_OUTPUT
+          git diff origin/main...HEAD --stat >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      # Claude preenche a descrição do PR
+      - name: Fill PR description
+        id: pr_description
+        run: |
+          PROMPT="Tens de preencher a descrição de um Pull Request.
+
+          ## Template a preencher
+          ${{ steps.template.outputs.content }}
+
+          ## Alterações realizadas no branch (git diff --stat)
+          ${{ steps.diff.outputs.content }}
+
+          ${{ steps.plan.outputs.found == 'true' && 
+            format('## Plano de execução\n{0}', steps.plan.outputs.content) || 
+            '' }}
+
+          Preenche o template acima com base nas informações disponíveis.
+          Responde APENAS com o template preenchido em Markdown, sem mais nada."
+
+          DESCRIPTION=$(curl -s https://api.anthropic.com/v1/messages \
+            -H "x-api-key: ${{ secrets.ANTHROPIC_API_KEY }}" \
+            -H "anthropic-version: 2023-06-01" \
+            -H "content-type: application/json" \
+            -d "{
+              \"model\": \"claude-opus-4-5\",
+              \"max_tokens\": 1024,
+              \"messages\": [{
+                \"role\": \"user\",
+                \"content\": $(echo "$PROMPT" | jq -Rs .)
+              }]
+            }" | jq -r '.content[0].text')
+
+          echo "content<<EOF" >> $GITHUB_OUTPUT
+          echo "$DESCRIPTION" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      # Atualiza a descrição do PR via API do GitHub
+      - name: Update PR description
+        run: |
+          gh pr edit ${{ github.event.pull_request.number }} \
+            --body "${{ steps.pr_description.outputs.content }}"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Review do código
+            # Review do código
+            - name: Claude PR Review
+              uses: anthropics/claude-code-action@beta
+              with:
+                anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+                prompt: |
+                  Assume o papel de um Senior Software Engineer com forte vertente de 
+                  Quality Assurance. A tua análise deve ser rigorosa, objetiva e acionável.
+
+                  ${{ inputs.project_context }}
+
+                  ---
+
+                  ${{ steps.plan.outputs.found == 'true' &&
+                    format('## Plano de execução\n\n{0}', steps.plan.outputs.content) ||
+                    '' }}
+
+                  ---
+
+                  ## A tua análise deve cobrir obrigatoriamente:
+
+                  ### 1. Validação do plano (apenas se existir)
+                  Para cada ponto do plano, indica explicitamente:
+                  - ✅ Implementado
+                  - ⚠️ Implementado parcialmente (explica o quê falta)
+                  - ❌ Não implementado
+
+                  ### 2. Qualidade do código
+                  Analisa:
+                  - Clareza, legibilidade e consistência com o restante codebase
+                  - Complexidade desnecessária ou código duplicado
+                  - Tratamento de erros e edge cases
+                  - Segurança (dados sensíveis, validações, injeções)
+                  - Performance (queries N+1, operações bloqueantes, etc.)
+
+                  ### 3. Testes
+                  Analisa:
+                  - Existência de testes para as alterações realizadas
+                  - Cobertura adequada: happy path, edge cases e cenários de erro
+                  - Qualidade dos testes (estão a testar comportamento ou apenas implementação?)
+                  - Ausência de testes críticos não justificada deve ser assinalada como blocker
+
+                  ---
+
+                  ## Formato do relatório
+
+                  Apresenta o relatório com a seguinte estrutura:
+
+                  ### Resumo
+                  Parágrafo curto com a avaliação geral do PR.
+
+                  ### Validação do plano
+                  (omitir se não existir plano)
+
+                  ### Findings
+
+                  Agrupa os findings por severidade:
+
+                  🔴 **BLOCKER** — Impede a aprovação do PR. Tem de ser corrigido.
+                  _Exemplos: bug crítico, ausência de testes em lógica de negócio, 
+                  vulnerabilidade de segurança, ponto do plano não implementado._
+
+                  🟠 **MAJOR** — Deve ser corrigido antes do merge, mas não bloqueia 
+                  necessariamente.
+                  _Exemplos: cobertura de testes insuficiente, tratamento de erros em falta, 
+                  má gestão de recursos._
+
+                  🟡 **MINOR** — Melhoria recomendada, pode ser endereçada depois.
+                  _Exemplos: legibilidade, nomenclatura, simplificação de lógica._
+
+                  🔵 **SUGGESTION** — Sugestão opcional de melhoria ou abordagem alternativa.
+
+                  Para cada finding indica:
+                  - Ficheiro e linha (quando aplicável)
+                  - Descrição do problema
+                  - Sugestão de correção com exemplo de código (quando relevante)
+
+                  ### Veredicto final
+                  - ✅ **Aprovado** — Sem blockers, pode fazer merge.
+                  - ⚠️ **Aprovado com reservas** — Sem blockers mas com majors a endereçar.
+                  - ❌ **Reprovado** — Tem blockers que impedem o merge.
