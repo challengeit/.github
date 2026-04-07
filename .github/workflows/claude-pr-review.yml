@@ -43,7 +43,7 @@ jobs:
         id: plan
         run: |
           PLAN_FILE=$(git log --name-only --format="" HEAD \
-            | grep "^plan.*\.md$" \
+            | grep "^plans/plan.*\.md$" \
             | head -1)
 
           if [ -n "$PLAN_FILE" ] && [ -f "$PLAN_FILE" ]; then
