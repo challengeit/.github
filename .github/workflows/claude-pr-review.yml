@@ -27,17 +27,12 @@ jobs:
         id: template
         run: |
           if [ -f ".github/pull_request_template.md" ]; then
-            TEMPLATE_PATH=".github/pull_request_template.md"
+            cp ".github/pull_request_template.md" /tmp/template.md
           else
             gh api repos/challengeit/.github/contents/pull_request_template.md \
-              --jq '.content' | base64 -d > /tmp/pr_template.md
-            TEMPLATE_PATH="/tmp/pr_template.md"
+              --jq '.content' | base64 -d > /tmp/template.md
           fi
-
-          DELIM=$(openssl rand -hex 16)
-          echo "content<<$DELIM" >> $GITHUB_OUTPUT
-          cat "$TEMPLATE_PATH" >> $GITHUB_OUTPUT
-          echo "$DELIM" >> $GITHUB_OUTPUT
+          echo "path=/tmp/template.md" >> $GITHUB_OUTPUT
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -50,86 +45,79 @@ jobs:
             | head -1)
 
           if [ -n "$PLAN_FILE" ] && [ -f "$PLAN_FILE" ]; then
+            cp "$PLAN_FILE" /tmp/plan.md
             echo "found=true" >> $GITHUB_OUTPUT
-            DELIM=$(openssl rand -hex 16)
-            echo "content<<$DELIM" >> $GITHUB_OUTPUT
-            cat "$PLAN_FILE" >> $GITHUB_OUTPUT
-            echo "$DELIM" >> $GITHUB_OUTPUT
+            echo "path=/tmp/plan.md" >> $GITHUB_OUTPUT
           else
             echo "found=false" >> $GITHUB_OUTPUT
+            echo "path=" >> $GITHUB_OUTPUT
           fi
 
       # Obtém o diff do branch
       - name: Get branch diff
         id: diff
         run: |
-          DELIM=$(openssl rand -hex 16)
-          echo "content<<$DELIM" >> $GITHUB_OUTPUT
-          git diff origin/main...HEAD --stat >> $GITHUB_OUTPUT
-          echo "$DELIM" >> $GITHUB_OUTPUT
+          git diff origin/main...HEAD --stat > /tmp/diff.txt
+          echo "path=/tmp/diff.txt" >> $GITHUB_OUTPUT
 
       # Claude preenche a descrição do PR
       - name: Fill PR description
         id: pr_description
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          TEMPLATE_CONTENT: ${{ steps.template.outputs.content }}
-          DIFF_CONTENT: ${{ steps.diff.outputs.content }}
-          PLAN_CONTENT: ${{ steps.plan.outputs.content }}
           PLAN_FOUND: ${{ steps.plan.outputs.found }}
         run: |
-          # Escreve os conteúdos em ficheiros temporários
-          echo "$TEMPLATE_CONTENT" > /tmp/template.md
-          echo "$DIFF_CONTENT" > /tmp/diff.txt
+          TEMPLATE=$(cat /tmp/template.md)
+          DIFF=$(cat /tmp/diff.txt)
 
           if [ "$PLAN_FOUND" = "true" ]; then
-            echo "$PLAN_CONTENT" > /tmp/plan.md
-            PLAN_SECTION=$(printf "## Plano de execução\n\n%s" "$(cat /tmp/plan.md)")
+            PLAN=$(cat /tmp/plan.md)
+            PLAN_SECTION="## Plano de execução
+
+          $PLAN"
           else
             PLAN_SECTION=""
           fi
 
-          # Constrói o prompt a partir dos ficheiros
-          PROMPT=$(printf "Tens de preencher a descrição de um Pull Request.\n\n## Template a preencher\n\n%s\n\n## Alterações realizadas no branch (git diff --stat)\n\n%s\n\n%s\n\nPreenche o template acima com base nas informações disponíveis.\nResponde APENAS com o template preenchido em Markdown, sem mais nada." \
-            "$(cat /tmp/template.md)" \
-            "$(cat /tmp/diff.txt)" \
-            "$PLAN_SECTION")
+          PAYLOAD=$(jq -n \
+            --arg template "$TEMPLATE" \
+            --arg diff "$DIFF" \
+            --arg plan "$PLAN_SECTION" \
+            '{
+              model: "claude-opus-4-5",
+              max_tokens: 1024,
+              messages: [{
+                role: "user",
+                content: ("Tens de preencher a descrição de um Pull Request.\n\n## Template a preencher\n\n" + $template + "\n\n## Alterações realizadas no branch (git diff --stat)\n\n" + $diff + "\n\n" + $plan + "\n\nPreenche o template acima com base nas informações disponíveis.\nResponde APENAS com o template preenchido em Markdown, sem mais nada.")
+              }]
+            }')
 
-          # Chama a API da Anthropic
-          DESCRIPTION=$(curl -s https://api.anthropic.com/v1/messages \
+          curl -s https://api.anthropic.com/v1/messages \
             -H "x-api-key: $ANTHROPIC_API_KEY" \
             -H "anthropic-version: 2023-06-01" \
             -H "content-type: application/json" \
-            -d "$(jq -n \
-              --arg prompt "$PROMPT" \
-              '{
-                model: "claude-opus-4-5",
-                max_tokens: 1024,
-                messages: [{ role: "user", content: $prompt }]
-              }')" | jq -r '.content[0].text')
+            -d "$PAYLOAD" | jq -r '.content[0].text' > /tmp/description.md
 
-          # Guarda o resultado em ficheiro e usa delimitador aleatório
-          echo "$DESCRIPTION" > /tmp/description.md
-          DELIM=$(openssl rand -hex 16)
-          echo "content<<$DELIM" >> $GITHUB_OUTPUT
-          cat /tmp/description.md >> $GITHUB_OUTPUT
-          echo "$DELIM" >> $GITHUB_OUTPUT
+          echo "path=/tmp/description.md" >> $GITHUB_OUTPUT
 
       # Atualiza a descrição do PR via API do GitHub
       - name: Update PR description
         run: |
+          DESCRIPTION=$(cat /tmp/description.md)
           gh pr edit ${{ github.event.pull_request.number }} \
-            --body "${{ steps.pr_description.outputs.content }}"
+            --body "$DESCRIPTION"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       # Review do código
       - name: Claude PR Review
         uses: anthropics/claude-code-action@beta
+        env:
+          PLAN_FOUND: ${{ steps.plan.outputs.found }}
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           prompt: |
-            Assume o papel de um Senior Software Engineer com forte vertente de 
+            Assume o papel de um Senior Software Engineer com forte vertente de
             Quality Assurance. A tua análise deve ser rigorosa, objetiva e acionável.
 
             ${{ inputs.project_context }}
@@ -137,7 +125,7 @@ jobs:
             ---
 
             ${{ steps.plan.outputs.found == 'true' &&
-              format('## Plano de execução\n\n{0}', steps.plan.outputs.content) ||
+              format('## Plano de execução\n\nVer ficheiro /tmp/plan.md') ||
               '' }}
 
             ---
@@ -182,12 +170,12 @@ jobs:
             Agrupa os findings por severidade:
 
             🔴 **BLOCKER** — Impede a aprovação do PR. Tem de ser corrigido.
-            _Exemplos: bug crítico, ausência de testes em lógica de negócio, 
+            _Exemplos: bug crítico, ausência de testes em lógica de negócio,
             vulnerabilidade de segurança, ponto do plano não implementado._
 
-            🟠 **MAJOR** — Deve ser corrigido antes do merge, mas não bloqueia 
+            🟠 **MAJOR** — Deve ser corrigido antes do merge, mas não bloqueia
             necessariamente.
-            _Exemplos: cobertura de testes insuficiente, tratamento de erros em falta, 
+            _Exemplos: cobertura de testes insuficiente, tratamento de erros em falta,
             má gestão de recursos._
 
             🟡 **MINOR** — Melhoria recomendada, pode ser endereçada depois.
