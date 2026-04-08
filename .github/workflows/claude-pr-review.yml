@@ -57,7 +57,9 @@ jobs:
       - name: Get branch diff
         id: diff
         run: |
-          git diff origin/main...HEAD --stat > /tmp/diff.txt
+          BASE_BRANCH=${{ github.event.pull_request.base.ref }}
+          git fetch origin $BASE_BRANCH
+          git diff origin/$BASE_BRANCH...HEAD --stat > /tmp/diff.txt
           echo "path=/tmp/diff.txt" >> $GITHUB_OUTPUT
 
       # Claude preenche a descrição do PR
