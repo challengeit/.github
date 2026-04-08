@@ -17,6 +17,7 @@ jobs:
     permissions:
       contents: read
       pull-requests: write
+      id-token: write
     steps:
       - uses: actions/checkout@v4
         with:
@@ -114,10 +115,9 @@ jobs:
       # Review do código
       - name: Claude PR Review
         uses: anthropics/claude-code-action@beta
-        env:
-          PLAN_FOUND: ${{ steps.plan.outputs.found }}
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
           prompt: |
             Assume o papel de um Senior Software Engineer com forte vertente de
             Quality Assurance. A tua análise deve ser rigorosa, objetiva e acionável.
