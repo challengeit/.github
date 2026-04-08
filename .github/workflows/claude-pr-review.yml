@@ -14,6 +14,9 @@ on:
 jobs:
   review:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
     steps:
       - uses: actions/checkout@v4
         with:
@@ -23,7 +26,6 @@ jobs:
       - name: Load PR template
         id: template
         run: |
-          # Tenta carregar do repo local, senão vai buscar ao repo central
           if [ -f ".github/pull_request_template.md" ]; then
             TEMPLATE_PATH=".github/pull_request_template.md"
           else
@@ -32,9 +34,10 @@ jobs:
             TEMPLATE_PATH="/tmp/pr_template.md"
           fi
 
-          echo "content<<CLAUDE_EOF" >> $GITHUB_OUTPUT
+          DELIM=$(openssl rand -hex 16)
+          echo "content<<$DELIM" >> $GITHUB_OUTPUT
           cat "$TEMPLATE_PATH" >> $GITHUB_OUTPUT
-          echo "CLAUDE_EOF" >> $GITHUB_OUTPUT
+          echo "$DELIM" >> $GITHUB_OUTPUT
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -48,9 +51,10 @@ jobs:
 
           if [ -n "$PLAN_FILE" ] && [ -f "$PLAN_FILE" ]; then
             echo "found=true" >> $GITHUB_OUTPUT
-            echo "content<<CLAUDE_EOF" >> $GITHUB_OUTPUT
+            DELIM=$(openssl rand -hex 16)
+            echo "content<<$DELIM" >> $GITHUB_OUTPUT
             cat "$PLAN_FILE" >> $GITHUB_OUTPUT
-            echo "CLAUDE_EOF" >> $GITHUB_OUTPUT
+            echo "$DELIM" >> $GITHUB_OUTPUT
           else
             echo "found=false" >> $GITHUB_OUTPUT
           fi
@@ -59,9 +63,10 @@ jobs:
       - name: Get branch diff
         id: diff
         run: |
-          echo "content<<CLAUDE_EOF" >> $GITHUB_OUTPUT
+          DELIM=$(openssl rand -hex 16)
+          echo "content<<$DELIM" >> $GITHUB_OUTPUT
           git diff origin/main...HEAD --stat >> $GITHUB_OUTPUT
-          echo "CLAUDE_EOF" >> $GITHUB_OUTPUT
+          echo "$DELIM" >> $GITHUB_OUTPUT
 
       # Claude preenche a descrição do PR
       - name: Fill PR description
@@ -95,9 +100,10 @@ jobs:
               }]
             }" | jq -r '.content[0].text')
 
-          echo "content<<CLAUDE_EOF" >> $GITHUB_OUTPUT
+          DELIM=$(openssl rand -hex 16)
+          echo "content<<$DELIM" >> $GITHUB_OUTPUT
           echo "$DESCRIPTION" >> $GITHUB_OUTPUT
-          echo "CLAUDE_EOF" >> $GITHUB_OUTPUT
+          echo "$DELIM" >> $GITHUB_OUTPUT
 
       # Atualiza a descrição do PR via API do GitHub
       - name: Update PR description
