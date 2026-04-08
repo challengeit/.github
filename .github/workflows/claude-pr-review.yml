@@ -71,38 +71,48 @@ jobs:
       # Claude preenche a descrição do PR
       - name: Fill PR description
         id: pr_description
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          TEMPLATE_CONTENT: ${{ steps.template.outputs.content }}
+          DIFF_CONTENT: ${{ steps.diff.outputs.content }}
+          PLAN_CONTENT: ${{ steps.plan.outputs.content }}
+          PLAN_FOUND: ${{ steps.plan.outputs.found }}
         run: |
-          PROMPT="Tens de preencher a descrição de um Pull Request.
+          # Escreve os conteúdos em ficheiros temporários
+          echo "$TEMPLATE_CONTENT" > /tmp/template.md
+          echo "$DIFF_CONTENT" > /tmp/diff.txt
 
-          ## Template a preencher
-          ${{ steps.template.outputs.content }}
+          if [ "$PLAN_FOUND" = "true" ]; then
+            echo "$PLAN_CONTENT" > /tmp/plan.md
+            PLAN_SECTION=$(printf "## Plano de execução\n\n%s" "$(cat /tmp/plan.md)")
+          else
+            PLAN_SECTION=""
+          fi
 
-          ## Alterações realizadas no branch (git diff --stat)
-          ${{ steps.diff.outputs.content }}
+          # Constrói o prompt a partir dos ficheiros
+          PROMPT=$(printf "Tens de preencher a descrição de um Pull Request.\n\n## Template a preencher\n\n%s\n\n## Alterações realizadas no branch (git diff --stat)\n\n%s\n\n%s\n\nPreenche o template acima com base nas informações disponíveis.\nResponde APENAS com o template preenchido em Markdown, sem mais nada." \
+            "$(cat /tmp/template.md)" \
+            "$(cat /tmp/diff.txt)" \
+            "$PLAN_SECTION")
 
-          ${{ steps.plan.outputs.found == 'true' && 
-            format('## Plano de execução\n{0}', steps.plan.outputs.content) || 
-            '' }}
-
-          Preenche o template acima com base nas informações disponíveis.
-          Responde APENAS com o template preenchido em Markdown, sem mais nada."
-
+          # Chama a API da Anthropic
           DESCRIPTION=$(curl -s https://api.anthropic.com/v1/messages \
-            -H "x-api-key: ${{ secrets.ANTHROPIC_API_KEY }}" \
+            -H "x-api-key: $ANTHROPIC_API_KEY" \
             -H "anthropic-version: 2023-06-01" \
             -H "content-type: application/json" \
-            -d "{
-              \"model\": \"claude-opus-4-5\",
-              \"max_tokens\": 1024,
-              \"messages\": [{
-                \"role\": \"user\",
-                \"content\": $(echo "$PROMPT" | jq -Rs .)
-              }]
-            }" | jq -r '.content[0].text')
+            -d "$(jq -n \
+              --arg prompt "$PROMPT" \
+              '{
+                model: "claude-opus-4-5",
+                max_tokens: 1024,
+                messages: [{ role: "user", content: $prompt }]
+              }')" | jq -r '.content[0].text')
 
+          # Guarda o resultado em ficheiro e usa delimitador aleatório
+          echo "$DESCRIPTION" > /tmp/description.md
           DELIM=$(openssl rand -hex 16)
           echo "content<<$DELIM" >> $GITHUB_OUTPUT
-          echo "$DESCRIPTION" >> $GITHUB_OUTPUT
+          cat /tmp/description.md >> $GITHUB_OUTPUT
           echo "$DELIM" >> $GITHUB_OUTPUT
 
       # Atualiza a descrição do PR via API do GitHub
