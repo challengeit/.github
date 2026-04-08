@@ -32,9 +32,9 @@ jobs:
             TEMPLATE_PATH="/tmp/pr_template.md"
           fi
 
-          echo "content<<EOF" >> $GITHUB_OUTPUT
+          echo "content<<CLAUDE_EOF" >> $GITHUB_OUTPUT
           cat "$TEMPLATE_PATH" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+          echo "CLAUDE_EOF" >> $GITHUB_OUTPUT
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -48,9 +48,9 @@ jobs:
 
           if [ -n "$PLAN_FILE" ] && [ -f "$PLAN_FILE" ]; then
             echo "found=true" >> $GITHUB_OUTPUT
-            echo "content<<EOF" >> $GITHUB_OUTPUT
+            echo "content<<CLAUDE_EOF" >> $GITHUB_OUTPUT
             cat "$PLAN_FILE" >> $GITHUB_OUTPUT
-            echo "EOF" >> $GITHUB_OUTPUT
+            echo "CLAUDE_EOF" >> $GITHUB_OUTPUT
           else
             echo "found=false" >> $GITHUB_OUTPUT
           fi
@@ -59,9 +59,9 @@ jobs:
       - name: Get branch diff
         id: diff
         run: |
-          echo "content<<EOF" >> $GITHUB_OUTPUT
+          echo "content<<CLAUDE_EOF" >> $GITHUB_OUTPUT
           git diff origin/main...HEAD --stat >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+          echo "CLAUDE_EOF" >> $GITHUB_OUTPUT
 
       # Claude preenche a descrição do PR
       - name: Fill PR description
@@ -95,9 +95,9 @@ jobs:
               }]
             }" | jq -r '.content[0].text')
 
-          echo "content<<EOF" >> $GITHUB_OUTPUT
+          echo "content<<CLAUDE_EOF" >> $GITHUB_OUTPUT
           echo "$DESCRIPTION" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+          echo "CLAUDE_EOF" >> $GITHUB_OUTPUT
 
       # Atualiza a descrição do PR via API do GitHub
       - name: Update PR description
