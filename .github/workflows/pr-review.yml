@@ -9,6 +9,7 @@ jobs:
     permissions:
       contents: read
       pull-requests: write
+      id-token: write
     uses: challengeit/.github/.github/workflows/claude-pr-review.yml@development
     secrets:
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
