@@ -108,84 +108,83 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       # Review do código
-            # Review do código
-            - name: Claude PR Review
-              uses: anthropics/claude-code-action@beta
-              with:
-                anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-                prompt: |
-                  Assume o papel de um Senior Software Engineer com forte vertente de 
-                  Quality Assurance. A tua análise deve ser rigorosa, objetiva e acionável.
+      - name: Claude PR Review
+        uses: anthropics/claude-code-action@beta
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt: |
+            Assume o papel de um Senior Software Engineer com forte vertente de 
+            Quality Assurance. A tua análise deve ser rigorosa, objetiva e acionável.
 
-                  ${{ inputs.project_context }}
+            ${{ inputs.project_context }}
 
-                  ---
+            ---
 
-                  ${{ steps.plan.outputs.found == 'true' &&
-                    format('## Plano de execução\n\n{0}', steps.plan.outputs.content) ||
-                    '' }}
+            ${{ steps.plan.outputs.found == 'true' &&
+              format('## Plano de execução\n\n{0}', steps.plan.outputs.content) ||
+              '' }}
 
-                  ---
+            ---
 
-                  ## A tua análise deve cobrir obrigatoriamente:
+            ## A tua análise deve cobrir obrigatoriamente:
 
-                  ### 1. Validação do plano (apenas se existir)
-                  Para cada ponto do plano, indica explicitamente:
-                  - ✅ Implementado
-                  - ⚠️ Implementado parcialmente (explica o quê falta)
-                  - ❌ Não implementado
+            ### 1. Validação do plano (apenas se existir)
+            Para cada ponto do plano, indica explicitamente:
+            - ✅ Implementado
+            - ⚠️ Implementado parcialmente (explica o quê falta)
+            - ❌ Não implementado
 
-                  ### 2. Qualidade do código
-                  Analisa:
-                  - Clareza, legibilidade e consistência com o restante codebase
-                  - Complexidade desnecessária ou código duplicado
-                  - Tratamento de erros e edge cases
-                  - Segurança (dados sensíveis, validações, injeções)
-                  - Performance (queries N+1, operações bloqueantes, etc.)
+            ### 2. Qualidade do código
+            Analisa:
+            - Clareza, legibilidade e consistência com o restante codebase
+            - Complexidade desnecessária ou código duplicado
+            - Tratamento de erros e edge cases
+            - Segurança (dados sensíveis, validações, injeções)
+            - Performance (queries N+1, operações bloqueantes, etc.)
 
-                  ### 3. Testes
-                  Analisa:
-                  - Existência de testes para as alterações realizadas
-                  - Cobertura adequada: happy path, edge cases e cenários de erro
-                  - Qualidade dos testes (estão a testar comportamento ou apenas implementação?)
-                  - Ausência de testes críticos não justificada deve ser assinalada como blocker
+            ### 3. Testes
+            Analisa:
+            - Existência de testes para as alterações realizadas
+            - Cobertura adequada: happy path, edge cases e cenários de erro
+            - Qualidade dos testes (estão a testar comportamento ou apenas implementação?)
+            - Ausência de testes críticos não justificada deve ser assinalada como blocker
 
-                  ---
+            ---
 
-                  ## Formato do relatório
+            ## Formato do relatório
 
-                  Apresenta o relatório com a seguinte estrutura:
+            Apresenta o relatório com a seguinte estrutura:
 
-                  ### Resumo
-                  Parágrafo curto com a avaliação geral do PR.
+            ### Resumo
+            Parágrafo curto com a avaliação geral do PR.
 
-                  ### Validação do plano
-                  (omitir se não existir plano)
+            ### Validação do plano
+            (omitir se não existir plano)
 
-                  ### Findings
+            ### Findings
 
-                  Agrupa os findings por severidade:
+            Agrupa os findings por severidade:
 
-                  🔴 **BLOCKER** — Impede a aprovação do PR. Tem de ser corrigido.
-                  _Exemplos: bug crítico, ausência de testes em lógica de negócio, 
-                  vulnerabilidade de segurança, ponto do plano não implementado._
+            🔴 **BLOCKER** — Impede a aprovação do PR. Tem de ser corrigido.
+            _Exemplos: bug crítico, ausência de testes em lógica de negócio, 
+            vulnerabilidade de segurança, ponto do plano não implementado._
 
-                  🟠 **MAJOR** — Deve ser corrigido antes do merge, mas não bloqueia 
-                  necessariamente.
-                  _Exemplos: cobertura de testes insuficiente, tratamento de erros em falta, 
-                  má gestão de recursos._
+            🟠 **MAJOR** — Deve ser corrigido antes do merge, mas não bloqueia 
+            necessariamente.
+            _Exemplos: cobertura de testes insuficiente, tratamento de erros em falta, 
+            má gestão de recursos._
 
-                  🟡 **MINOR** — Melhoria recomendada, pode ser endereçada depois.
-                  _Exemplos: legibilidade, nomenclatura, simplificação de lógica._
+            🟡 **MINOR** — Melhoria recomendada, pode ser endereçada depois.
+            _Exemplos: legibilidade, nomenclatura, simplificação de lógica._
 
-                  🔵 **SUGGESTION** — Sugestão opcional de melhoria ou abordagem alternativa.
+            🔵 **SUGGESTION** — Sugestão opcional de melhoria ou abordagem alternativa.
 
-                  Para cada finding indica:
-                  - Ficheiro e linha (quando aplicável)
-                  - Descrição do problema
-                  - Sugestão de correção com exemplo de código (quando relevante)
+            Para cada finding indica:
+            - Ficheiro e linha (quando aplicável)
+            - Descrição do problema
+            - Sugestão de correção com exemplo de código (quando relevante)
 
-                  ### Veredicto final
-                  - ✅ **Aprovado** — Sem blockers, pode fazer merge.
-                  - ⚠️ **Aprovado com reservas** — Sem blockers mas com majors a endereçar.
-                  - ❌ **Reprovado** — Tem blockers que impedem o merge.
+            ### Veredicto final
+            - ✅ **Aprovado** — Sem blockers, pode fazer merge.
+            - ⚠️ **Aprovado com reservas** — Sem blockers mas com majors a endereçar.
+            - ❌ **Reprovado** — Tem blockers que impedem o merge.
